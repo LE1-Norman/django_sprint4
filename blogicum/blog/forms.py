@@ -5,9 +5,15 @@ from .models import Post, Comment
 class PostCreateForm(forms.ModelForm):
     class Meta:
         model = Post
-        fields = ['title', 'text', 'category', 'location', 'image', 'pub_date']
+        fields = [
+            'title', 'text', 'category', 'location',
+            'image', 'pub_date', 'is_published'
+        ]
         widgets = {
-            'pub_date': forms.DateInput(attrs={'type': 'date'})
+            'pub_date': forms.DateTimeInput(
+                attrs={'type': 'datetime-local'},
+                format='%Y-%m-%dT%H:%M'
+            )
         }
 
     def __init__(self, *args, **kwargs):

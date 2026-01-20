@@ -1,6 +1,14 @@
 {% extends "base.html" %}
 {% load django_bootstrap5 %}
 {% block content %}
+  <style>
+    .form-control.is-valid {
+      border-color: #ced4da !important;
+      box-shadow: none !important;
+      background-color: #fff !important;
+    }
+  </style>
+
   {% if next %}
     {% if user.is_authenticated %}
       <p class="text-center">
@@ -21,7 +29,7 @@
         Войти в систему
       </div>
       <div class="card-body">
-        <form method="post" action="{% url 'login' %}">
+        <form method="post" action="{% url 'login' %}" novalidate autocomplete="off">
           {% csrf_token %}
           {% bootstrap_form form %}
           <input type="hidden" name="next" value="{{ next }}">
