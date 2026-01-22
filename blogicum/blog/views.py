@@ -16,6 +16,8 @@ from django.urls import reverse, reverse_lazy
 from .forms import PostCreateForm, CommentForm
 from django.db.models import Count
 
+from .utils import annotate_comment, paginate_queryset
+
 User = get_user_model()
 
 
@@ -45,13 +47,19 @@ class ProfileDetailView(DetailView):
                 pub_date__lte=timezone.now()
             )
 
-        posts = posts.annotate(
-            comment_count=Count('comments')
-        ).select_related('category').order_by('-pub_date')
+        posts = annotate_comment(posts).select_related(
+            'author',
+            'location',
+            'category'
+        ).order_by('-pub_date')
 
-        paginator = Paginator(posts, 10)
-        page_number = self.request.GET.get('page')
-        context['page_obj'] = paginator.get_page(page_number)
+        # Сортировка указана в модели Post.Meta.ordering.
+        # Однако при использовании обратной связи (related_name)
+        # вместе с .annotate() Django не применяет сортировку автоматически.
+        # Поэтому для гарантии корректного порядка используется
+        # .order_by('-pub_date'), что соответствует значению из модели.
+
+        context['page_obj'] = paginate_queryset(self.request, posts, 10)
         return context
 
 
@@ -74,20 +82,14 @@ class IndexListView(ListView):
     model = Post
     template_name = 'blog/index.html'
     paginate_by = 10
-    ordering = ['-pub_date']
 
     def get_queryset(self):
-        return Post.objects.filter(
+        posts = Post.objects.filter(
             is_published=True,
             category__is_published=True,
             pub_date__lte=timezone.now()
-        ).select_related(
-            'category',
-            'author',
-            'location'
-        ).annotate(
-            comment_count=Count('comments')
-        ).order_by('-pub_date')
+        ).select_related('category', 'author', 'location')
+        return annotate_comment(posts).order_by('-pub_date')
 
 
 # def sort_post_by_date():
@@ -96,14 +98,18 @@ class IndexListView(ListView):
 #         is_published=True,
 #         pub_date__lte=current_time,
 #         category__is_published=True
-#     )
+#     ).select_related('author', 'location', 'category')
 
 
 def post_detail(request, post_id):
     template = 'blog/detail.html'
 
     try:
-        post = Post.objects.get(id=post_id)
+        post = Post.objects.select_related(
+            'author',
+            'location',
+            'category'
+        ).get(id=post_id)
     except Post.DoesNotExist:
         raise Http404(f"Пост с ID {post_id} не найден.")
 
@@ -137,16 +143,14 @@ def category_posts(request, category_slug):
     post_list = category.posts_by_category.filter(
         is_published=True,
         pub_date__lte=timezone.now()
-    ).annotate(
-        comment_count=Count('comments')
-    ).select_related(
+    )
+    post_list = annotate_comment(post_list).select_related(
         'author',
-        'location'
+        'location',
+        'category'
     ).order_by('-pub_date')
 
-    paginator = Paginator(post_list, 10)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
+    page_obj = paginate_queryset(request, post_list, 10)
 
     context = {
         'category': category,
@@ -171,7 +175,7 @@ class PostCreateView(LoginRequiredMixin, CreateView):
         )
 
 
-class PostUpdateView(UpdateView):
+class PostUpdateView(LoginRequiredMixin, UpdateView):
     model = Post
     form_class = PostCreateForm
     template_name = 'blog/create.html'
